@@ -31,13 +31,36 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
--- Re-apply check constraints (idempotent)
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS valid_role;
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS valid_status;
-ALTER TABLE public.profiles
-  ADD CONSTRAINT valid_role CHECK (role IN ('owner', 'admin', 'editor', 'viewer'));
-ALTER TABLE public.profiles
-  ADD CONSTRAINT valid_status CHECK (status IN ('pending', 'approved', 'rejected'));
+-- Check constraints (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class r ON r.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = r.relnamespace
+    WHERE n.nspname = 'public'
+      AND r.relname = 'profiles'
+      AND c.conname = 'valid_role'
+  ) THEN
+    ALTER TABLE public.profiles
+      ADD CONSTRAINT valid_role CHECK (role IN ('owner', 'admin', 'editor', 'viewer'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class r ON r.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = r.relnamespace
+    WHERE n.nspname = 'public'
+      AND r.relname = 'profiles'
+      AND c.conname = 'valid_status'
+  ) THEN
+    ALTER TABLE public.profiles
+      ADD CONSTRAINT valid_status CHECK (status IN ('pending', 'approved', 'rejected'));
+  END IF;
+END $$;
 
 
 -- ── Indexes ──────────────────────────────────
@@ -86,14 +109,12 @@ $$;
 
 
 -- ── Triggers ─────────────────────────────────
-DROP TRIGGER IF EXISTS on_profile_updated ON public.profiles;
-CREATE TRIGGER on_profile_updated
+CREATE OR REPLACE TRIGGER on_profile_updated
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
+CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
@@ -102,56 +123,100 @@ CREATE TRIGGER on_auth_user_created
 -- ── RLS + Policies ───────────────────────────
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Owners can update any profile" ON public.profiles;
-DROP POLICY IF EXISTS "Admins can update non-owner profiles" ON public.profiles;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Users can view own profile'
+  ) THEN
+    CREATE POLICY "Users can view own profile"
+      ON public.profiles FOR SELECT
+      TO authenticated
+      USING (auth.uid() = id);
+  END IF;
+END $$;
 
-CREATE POLICY "Users can view own profile"
-  ON public.profiles FOR SELECT
-  TO authenticated
-  USING (auth.uid() = id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Admins can view all profiles'
+  ) THEN
+    CREATE POLICY "Admins can view all profiles"
+      ON public.profiles FOR SELECT
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = auth.uid()
+            AND p.role IN ('owner', 'admin')
+        )
+      );
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can view all profiles"
-  ON public.profiles FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-        AND p.role IN ('owner', 'admin')
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Users can update own profile'
+  ) THEN
+    CREATE POLICY "Users can update own profile"
+      ON public.profiles FOR UPDATE
+      TO authenticated
+      USING (auth.uid() = id)
+      WITH CHECK (auth.uid() = id);
+  END IF;
+END $$;
 
-CREATE POLICY "Users can update own profile"
-  ON public.profiles FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Owners can update any profile'
+  ) THEN
+    CREATE POLICY "Owners can update any profile"
+      ON public.profiles FOR UPDATE
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = auth.uid()
+            AND p.role = 'owner'
+        )
+      );
+  END IF;
+END $$;
 
-CREATE POLICY "Owners can update any profile"
-  ON public.profiles FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-        AND p.role = 'owner'
-    )
-  );
-
-CREATE POLICY "Admins can update non-owner profiles"
-  ON public.profiles FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles p
-      WHERE p.id = auth.uid()
-        AND p.role = 'admin'
-    )
-    AND role != 'owner'
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Admins can update non-owner profiles'
+  ) THEN
+    CREATE POLICY "Admins can update non-owner profiles"
+      ON public.profiles FOR UPDATE
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM public.profiles p
+          WHERE p.id = auth.uid()
+            AND p.role = 'admin'
+        )
+        AND role != 'owner'
+      );
+  END IF;
+END $$;
 
 
 -- ── Grants ───────────────────────────────────

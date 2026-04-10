@@ -19,21 +19,49 @@ ALTER TABLE public.audit_log
 
 
 -- ── Append-only rules ────────────────────────
-DROP RULE IF EXISTS audit_no_update ON public.audit_log;
-DROP RULE IF EXISTS audit_no_delete ON public.audit_log;
-CREATE RULE audit_no_update AS ON UPDATE TO public.audit_log DO INSTEAD NOTHING;
-CREATE RULE audit_no_delete AS ON DELETE TO public.audit_log DO INSTEAD NOTHING;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_rules
+    WHERE schemaname = 'public'
+      AND tablename = 'audit_log'
+      AND rulename = 'audit_no_update'
+  ) THEN
+    CREATE RULE audit_no_update AS ON UPDATE TO public.audit_log DO INSTEAD NOTHING;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_rules
+    WHERE schemaname = 'public'
+      AND tablename = 'audit_log'
+      AND rulename = 'audit_no_delete'
+  ) THEN
+    CREATE RULE audit_no_delete AS ON DELETE TO public.audit_log DO INSTEAD NOTHING;
+  END IF;
+END $$;
 
 
 -- ── RLS + Grants ─────────────────────────────
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS deny_anon_all_audit ON public.audit_log;
-CREATE POLICY deny_anon_all_audit
-  ON public.audit_log AS RESTRICTIVE
-  FOR ALL
-  TO anon, authenticated
-  USING (false) WITH CHECK (false);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'audit_log'
+      AND policyname = 'deny_anon_all_audit'
+  ) THEN
+    CREATE POLICY deny_anon_all_audit
+      ON public.audit_log AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
 
 REVOKE ALL ON TABLE public.audit_log FROM PUBLIC;
 REVOKE ALL ON TABLE public.audit_log FROM anon, authenticated;

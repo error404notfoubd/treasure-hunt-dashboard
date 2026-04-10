@@ -19,12 +19,21 @@ CREATE INDEX IF NOT EXISTS idx_rate_events_ip_route_time
 -- ── RLS + Grants ─────────────────────────────
 ALTER TABLE public.rate_limit_events ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS deny_anon_all_rate_events ON public.rate_limit_events;
-CREATE POLICY deny_anon_all_rate_events
-  ON public.rate_limit_events AS RESTRICTIVE
-  FOR ALL
-  TO anon, authenticated
-  USING (false) WITH CHECK (false);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'rate_limit_events'
+      AND policyname = 'deny_anon_all_rate_events'
+  ) THEN
+    CREATE POLICY deny_anon_all_rate_events
+      ON public.rate_limit_events AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
 
 REVOKE ALL ON TABLE public.rate_limit_events FROM PUBLIC;
 REVOKE ALL ON TABLE public.rate_limit_events FROM anon, authenticated;

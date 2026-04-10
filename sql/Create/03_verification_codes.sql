@@ -24,12 +24,21 @@ CREATE INDEX IF NOT EXISTS idx_verification_codes_phone_active
 -- ── RLS + Grants ─────────────────────────────
 ALTER TABLE public.verification_codes ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS deny_anon_all_verification_codes ON public.verification_codes;
-CREATE POLICY deny_anon_all_verification_codes
-  ON public.verification_codes AS RESTRICTIVE
-  FOR ALL
-  TO anon, authenticated
-  USING (false) WITH CHECK (false);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'verification_codes'
+      AND policyname = 'deny_anon_all_verification_codes'
+  ) THEN
+    CREATE POLICY deny_anon_all_verification_codes
+      ON public.verification_codes AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
 
 REVOKE ALL ON TABLE public.verification_codes FROM PUBLIC;
 REVOKE ALL ON TABLE public.verification_codes FROM anon, authenticated;

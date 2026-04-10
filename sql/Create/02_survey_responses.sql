@@ -123,17 +123,40 @@ CREATE INDEX IF NOT EXISTS idx_survey_flagged
 -- ── RLS + Grants ─────────────────────────────
 ALTER TABLE public.survey_responses ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS deny_anon_all_survey ON public.survey_responses;
-CREATE POLICY deny_anon_all_survey
-  ON public.survey_responses AS RESTRICTIVE
-  FOR ALL
-  TO anon, authenticated
-  USING (false) WITH CHECK (false);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'survey_responses'
+      AND policyname = 'deny_anon_all_survey'
+  ) THEN
+    CREATE POLICY deny_anon_all_survey
+      ON public.survey_responses AS RESTRICTIVE
+      FOR ALL
+      TO anon, authenticated
+      USING (false) WITH CHECK (false);
+  END IF;
+END $$;
 
 REVOKE ALL ON TABLE public.survey_responses FROM PUBLIC;
 REVOKE ALL ON TABLE public.survey_responses FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.survey_responses TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.survey_responses_id_seq TO service_role;
 
--- No DB trigger on survey_responses (audit is API-owned)
-DROP TRIGGER IF EXISTS trg_survey_audit ON public.survey_responses;
+-- No DB trigger on survey_responses (audit is API-owned); remove legacy trigger if present
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'survey_responses'
+      AND t.tgname = 'trg_survey_audit'
+      AND NOT t.tgisinternal
+  ) THEN
+    DROP TRIGGER trg_survey_audit ON public.survey_responses;
+  END IF;
+END $$;
