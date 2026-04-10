@@ -74,7 +74,7 @@ Fill in all values from **Project Settings → API → Publishable and secret AP
 | `SUPABASE_PUBLISHABLE_KEY` | Server-side SSR client (cookie-based auth) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser — same value as `SUPABASE_URL` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser — login/signup only |
-| `ALLOWED_DOMAIN` | Domain lock — restricts the app to this hostname only (omit for local dev) |
+| `ALLOWED_DOMAIN` | Domain lock — comma-separated hostnames (e.g. `localhost,your-project.vercel.app`); omit to allow all hosts |
 
 ### 3. Install and run
 
@@ -113,7 +113,7 @@ The simplest and best-supported option for Next.js apps.
    - `SUPABASE_PUBLISHABLE_KEY`
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-   - `ALLOWED_DOMAIN` — set to your Vercel domain (e.g. `your-project.vercel.app`)
+   - `ALLOWED_DOMAIN` — e.g. `localhost,127.0.0.1,your-project.vercel.app` (comma-separated; include localhost for local dev)
 4. Deploy. Vercel auto-detects Next.js and configures the build.
 
 Production URL will be `https://your-project.vercel.app`. Add a custom domain in **Settings → Domains**.
@@ -252,7 +252,7 @@ Before going live, verify every item:
 ### Environment
 
 - [ ] All six environment variables are set in production (including `ALLOWED_DOMAIN`)
-- [ ] `ALLOWED_DOMAIN` is set to your production hostname (e.g. `your-project.vercel.app`)
+- [ ] `ALLOWED_DOMAIN` lists production hostname(s) and, if you use the lock locally, `localhost` / `127.0.0.1`
 - [ ] `SUPABASE_SECRET_KEY` is **not** exposed to the browser (no `NEXT_PUBLIC_` prefix)
 - [ ] `.env.local` is in `.gitignore` and not committed to the repository
 
@@ -330,7 +330,7 @@ treasure-hunt-dashboard/
 
 ## Security
 
-**Domain lock** — When `ALLOWED_DOMAIN` is set, the middleware rejects any request whose `Host`, `Origin`, or `Referer` header doesn't match the configured domain. This prevents the app from being accessed through unauthorized domains and blocks cross-origin API abuse. Omit the variable in development to allow `localhost`.
+**Domain lock** — When `ALLOWED_DOMAIN` is set, the middleware rejects requests whose `Host`, `Origin`, or `Referer` hostname is not in the comma-separated list (ports are ignored). Add `localhost` and `127.0.0.1` to the same variable for local dev, or omit `ALLOWED_DOMAIN` entirely to disable the lock.
 
 **CSRF protection** — Middleware generates a `_csrf` cookie on first visit. All state-changing API requests (POST/PATCH/DELETE) must include a matching `x-csrf-token` header. The `apiFetch` client wrapper handles this automatically.
 

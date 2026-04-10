@@ -5,19 +5,57 @@ const CSRF_COOKIE = "_csrf";
 const CSRF_HEADER = "x-csrf-token";
 const SESSION_COOKIE = "_sid";
 
-const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || null;
+/** Normalize a hostname from env or URL (lowercase, no scheme, no port, no path). */
+function normalizeHostname(raw) {
+  if (raw == null || typeof raw !== "string") return "";
+  let s = raw.trim().toLowerCase();
+  if (!s) return "";
+  s = s.replace(/^https?:\/\//i, "");
+  s = s.split("/")[0] || "";
+  s = s.replace(/:\d+$/, "");
+  return s;
+}
+
+/** Allowed hosts: comma-separated ALLOWED_DOMAIN + VERCEL_URL (set automatically on Vercel). */
+function getAllowedHosts() {
+  const envRaw = process.env.ALLOWED_DOMAIN;
+  const hosts = new Set();
+
+  if (envRaw && String(envRaw).trim()) {
+    for (const part of String(envRaw).split(",")) {
+      const h = normalizeHostname(part);
+      if (h) hosts.add(h);
+    }
+    /* Same deployment is also reachable via VERCEL_URL (e.g. …-n1h907876-…vercel.app). */
+    if (process.env.VERCEL_URL) {
+      const v = normalizeHostname(process.env.VERCEL_URL);
+      if (v) hosts.add(v);
+    }
+  }
+
+  return hosts.size > 0 ? hosts : null;
+}
+
+function requestHostname(request) {
+  const host = request.headers.get("host")?.replace(/:\d+$/, "");
+  if (host) return host;
+  const xf = request.headers.get("x-forwarded-host");
+  if (xf) return normalizeHostname(xf.split(",")[0]);
+  return "";
+}
 
 function isDomainAllowed(request) {
-  if (!ALLOWED_DOMAIN) return true;
+  const allowed = getAllowedHosts();
+  if (!allowed) return true;
 
-  const host = request.headers.get("host")?.replace(/:\d+$/, "");
-  if (host && host !== ALLOWED_DOMAIN) return false;
+  const host = requestHostname(request);
+  if (host && !allowed.has(normalizeHostname(host))) return false;
 
   const origin = request.headers.get("origin");
   if (origin) {
     try {
-      const originHost = new URL(origin).hostname;
-      if (originHost !== ALLOWED_DOMAIN) return false;
+      const originHost = normalizeHostname(new URL(origin).hostname);
+      if (originHost && !allowed.has(originHost)) return false;
     } catch {
       return false;
     }
@@ -26,8 +64,8 @@ function isDomainAllowed(request) {
   const referer = request.headers.get("referer");
   if (!origin && referer) {
     try {
-      const refHost = new URL(referer).hostname;
-      if (refHost !== ALLOWED_DOMAIN) return false;
+      const refHost = normalizeHostname(new URL(referer).hostname);
+      if (refHost && !allowed.has(refHost)) return false;
     } catch {
       return false;
     }
