@@ -16,32 +16,76 @@ function normalizeHostname(raw) {
   return s;
 }
 
+function stripLeadingWww(host) {
+  const h = normalizeHostname(host);
+  if (!h) return "";
+  return h.startsWith("www.") ? h.slice(4) : h;
+}
+
+/** IPv4 hostnames only get exact-match (no subdomain / www rules). */
+function isIpv4Host(host) {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(normalizeHostname(host));
+}
+
 /**
- * Allowed hosts: ALLOWED_DOMAIN + Vercel system URLs.
+ * True if `host` is allowed by a single rule (apex, www variant, or any subdomain under rule).
+ */
+function hostMatchesAllowedRule(host, rule) {
+  const h = normalizeHostname(host);
+  const r = normalizeHostname(rule);
+  if (!h || !r) return false;
+  if (h === r) return true;
+  if (isIpv4Host(h) || isIpv4Host(r)) return false;
+
+  if (stripLeadingWww(h) === stripLeadingWww(r)) return true;
+
+  if (h === r || h.endsWith("." + r)) return true;
+
+  return false;
+}
+
+function isHostAllowedByRules(host, rules) {
+  const h = normalizeHostname(host);
+  if (!h) return false;
+  for (const rule of rules) {
+    if (hostMatchesAllowedRule(h, rule)) return true;
+  }
+  return false;
+}
+
+/**
+ * Allowed host rules: ALLOWED_DOMAIN + Vercel system URLs.
+ * Each rule matches that hostname, its www/non-www pair, and every subdomain.
  * VERCEL_URL is the deployment hostname; the stable project URL is often
  * VERCEL_PROJECT_PRODUCTION_URL (e.g. project.vercel.app) — they can differ, so include both.
  * @see https://vercel.com/docs/projects/environment-variables/system-environment-variables
  */
-function getAllowedHosts() {
+function getAllowedHostRules() {
   const envRaw = process.env.ALLOWED_DOMAIN;
-  const hosts = new Set();
+  const rules = [];
 
   if (envRaw && String(envRaw).trim()) {
+    const seen = new Set();
+    const push = (raw) => {
+      const h = normalizeHostname(raw);
+      if (h && !seen.has(h)) {
+        seen.add(h);
+        rules.push(h);
+      }
+    };
     for (const part of String(envRaw).split(",")) {
-      const h = normalizeHostname(part);
-      if (h) hosts.add(h);
+      push(part);
     }
     for (const key of [
       "VERCEL_URL",
       "VERCEL_PROJECT_PRODUCTION_URL",
       "VERCEL_BRANCH_URL",
     ]) {
-      const v = normalizeHostname(process.env[key]);
-      if (v) hosts.add(v);
+      push(process.env[key]);
     }
   }
 
-  return hosts.size > 0 ? hosts : null;
+  return rules.length > 0 ? rules : null;
 }
 
 function requestHostname(request) {
@@ -53,17 +97,17 @@ function requestHostname(request) {
 }
 
 function isDomainAllowed(request) {
-  const allowed = getAllowedHosts();
-  if (!allowed) return true;
+  const rules = getAllowedHostRules();
+  if (!rules) return true;
 
   const host = requestHostname(request);
-  if (host && !allowed.has(normalizeHostname(host))) return false;
+  if (host && !isHostAllowedByRules(host, rules)) return false;
 
   const origin = request.headers.get("origin");
   if (origin) {
     try {
       const originHost = normalizeHostname(new URL(origin).hostname);
-      if (originHost && !allowed.has(originHost)) return false;
+      if (originHost && !isHostAllowedByRules(originHost, rules)) return false;
     } catch {
       return false;
     }
@@ -73,7 +117,7 @@ function isDomainAllowed(request) {
   if (!origin && referer) {
     try {
       const refHost = normalizeHostname(new URL(referer).hostname);
-      if (refHost && !allowed.has(refHost)) return false;
+      if (refHost && !isHostAllowedByRules(refHost, rules)) return false;
     } catch {
       return false;
     }
