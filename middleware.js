@@ -16,7 +16,12 @@ function normalizeHostname(raw) {
   return s;
 }
 
-/** Allowed hosts: comma-separated ALLOWED_DOMAIN + VERCEL_URL (set automatically on Vercel). */
+/**
+ * Allowed hosts: ALLOWED_DOMAIN + Vercel system URLs.
+ * VERCEL_URL is the deployment hostname; the stable project URL is often
+ * VERCEL_PROJECT_PRODUCTION_URL (e.g. project.vercel.app) — they can differ, so include both.
+ * @see https://vercel.com/docs/projects/environment-variables/system-environment-variables
+ */
 function getAllowedHosts() {
   const envRaw = process.env.ALLOWED_DOMAIN;
   const hosts = new Set();
@@ -26,9 +31,12 @@ function getAllowedHosts() {
       const h = normalizeHostname(part);
       if (h) hosts.add(h);
     }
-    /* Same deployment is also reachable via VERCEL_URL (e.g. …-n1h907876-…vercel.app). */
-    if (process.env.VERCEL_URL) {
-      const v = normalizeHostname(process.env.VERCEL_URL);
+    for (const key of [
+      "VERCEL_URL",
+      "VERCEL_PROJECT_PRODUCTION_URL",
+      "VERCEL_BRANCH_URL",
+    ]) {
+      const v = normalizeHostname(process.env[key]);
       if (v) hosts.add(v);
     }
   }
