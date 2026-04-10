@@ -1,0 +1,111 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: #07090d;
+    color: #e6edf3;
+    font-family: "Outfit", system-ui, sans-serif;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #3b4453;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #5e6b7a;
+  }
+}
+
+@layer components {
+  /* Form inputs */
+  .input {
+    @apply w-full px-3.5 py-2.5 bg-surface-2 border border-surface-4 rounded-lg
+      text-ink-1 text-sm font-sans outline-none transition-colors duration-150
+      placeholder:text-ink-4;
+  }
+  .input:focus {
+    @apply border-accent;
+  }
+  .input:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .label {
+    @apply block text-[11px] font-semibold text-ink-3 uppercase tracking-wider mb-1.5;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+      text-sm font-semibold cursor-pointer border-none transition-all duration-150
+      disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-accent-hover;
+  }
+  .btn-secondary {
+    @apply bg-surface-3 text-ink-1 border border-surface-4 hover:bg-surface-4;
+  }
+  .btn-danger {
+    @apply bg-danger text-white hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink-2 hover:bg-surface-3 hover:text-ink-1;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-surface-2 border border-surface-3 rounded-xl;
+  }
+
+  /* Table */
+  .data-table {
+    @apply w-full border-collapse;
+  }
+  .data-table thead th {
+    @apply text-left px-4 py-2.5 text-[11px] font-semibold text-ink-3 uppercase
+      tracking-wider border-b border-surface-3 whitespace-nowrap;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 text-sm border-b border-surface-3/50 whitespace-nowrap;
+  }
+  .data-table tbody tr {
+    @apply transition-colors duration-100 hover:bg-surface-3/40;
+  }
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}
