@@ -74,6 +74,7 @@ Fill in all values from **Project Settings → API → Publishable and secret AP
 | `SUPABASE_PUBLISHABLE_KEY` | Server-side SSR client (cookie-based auth) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser — same value as `SUPABASE_URL` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser — login/signup only |
+| `ALLOWED_DOMAIN` | Domain lock — restricts the app to this hostname only (omit for local dev) |
 
 ### 3. Install and run
 
@@ -106,12 +107,13 @@ The simplest and best-supported option for Next.js apps.
 
 1. Push the repo to GitHub.
 2. Go to [vercel.com](https://vercel.com) and import the repository.
-3. Add all five environment variables in **Settings → Environment Variables**:
+3. Add all environment variables in **Settings → Environment Variables**:
    - `SUPABASE_URL`
    - `SUPABASE_SECRET_KEY`
    - `SUPABASE_PUBLISHABLE_KEY`
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `ALLOWED_DOMAIN` — set to your Vercel domain (e.g. `your-project.vercel.app`)
 4. Deploy. Vercel auto-detects Next.js and configures the build.
 
 Production URL will be `https://your-project.vercel.app`. Add a custom domain in **Settings → Domains**.
@@ -243,20 +245,23 @@ Before going live, verify every item:
 - [ ] First owner account is created and has `role = 'owner'`, `status = 'approved'`
 - [ ] **Auth → URL Configuration → Site URL** is set to your production URL
 - [ ] **Auth → URL Configuration → Redirect URLs** includes your production URL
+- [ ] **API Settings → Custom CORS** allowed origins set to your production URL only
 - [ ] Email confirmation is configured (or intentionally disabled for internal use)
 - [ ] Email templates are reviewed (Supabase → Auth → Email Templates)
 
 ### Environment
 
-- [ ] All five environment variables are set in production
+- [ ] All six environment variables are set in production (including `ALLOWED_DOMAIN`)
+- [ ] `ALLOWED_DOMAIN` is set to your production hostname (e.g. `your-project.vercel.app`)
 - [ ] `SUPABASE_SECRET_KEY` is **not** exposed to the browser (no `NEXT_PUBLIC_` prefix)
 - [ ] `.env.local` is in `.gitignore` and not committed to the repository
 
 ### Security
 
 - [ ] HTTPS is enforced (redirect HTTP → HTTPS)
+- [ ] Domain lock is active — middleware rejects requests from unauthorized hosts/origins
 - [ ] Cookies are set with `secure: true` in production (handled automatically by middleware)
-- [ ] CORS is not overly permissive (same-origin by default — no config needed)
+- [ ] Supabase CORS is restricted to your production domain only
 - [ ] Rate limiting is active on password change and email check endpoints
 
 ### Build & Deploy
@@ -324,6 +329,8 @@ treasure-hunt-dashboard/
 ```
 
 ## Security
+
+**Domain lock** — When `ALLOWED_DOMAIN` is set, the middleware rejects any request whose `Host`, `Origin`, or `Referer` header doesn't match the configured domain. This prevents the app from being accessed through unauthorized domains and blocks cross-origin API abuse. Omit the variable in development to allow `localhost`.
 
 **CSRF protection** — Middleware generates a `_csrf` cookie on first visit. All state-changing API requests (POST/PATCH/DELETE) must include a matching `x-csrf-token` header. The `apiFetch` client wrapper handles this automatically.
 

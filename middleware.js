@@ -5,7 +5,46 @@ const CSRF_COOKIE = "_csrf";
 const CSRF_HEADER = "x-csrf-token";
 const SESSION_COOKIE = "_sid";
 
+const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || null;
+
+function isDomainAllowed(request) {
+  if (!ALLOWED_DOMAIN) return true;
+
+  const host = request.headers.get("host")?.replace(/:\d+$/, "");
+  if (host && host !== ALLOWED_DOMAIN) return false;
+
+  const origin = request.headers.get("origin");
+  if (origin) {
+    try {
+      const originHost = new URL(origin).hostname;
+      if (originHost !== ALLOWED_DOMAIN) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  const referer = request.headers.get("referer");
+  if (!origin && referer) {
+    try {
+      const refHost = new URL(referer).hostname;
+      if (refHost !== ALLOWED_DOMAIN) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export async function middleware(request) {
+  // ── Domain lock: reject requests from unauthorized hosts ──
+  if (!isDomainAllowed(request)) {
+    return NextResponse.json(
+      { error: "Forbidden — unauthorized domain" },
+      { status: 403 }
+    );
+  }
+
   let response = NextResponse.next({ request: { headers: request.headers } });
   const { pathname } = request.nextUrl;
 
