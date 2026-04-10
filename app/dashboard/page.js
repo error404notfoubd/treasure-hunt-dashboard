@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useUser } from "./dashboard-client";
 import { useToast } from "@/components/toast";
 import { apiFetch } from "@/lib/api-client";
-import { canEditData, canDeleteData } from "@/lib/roles";
-import { IconSearch, IconEdit, IconFlag, IconTrash, IconChevLeft, IconChevRight, IconRefresh } from "@/components/icons";
+import { canEditData, canDeleteData, canVerifyData } from "@/lib/roles";
+import { IconSearch, IconEdit, IconFlag, IconTrash, IconChevLeft, IconChevRight, IconRefresh, IconShieldCheck } from "@/components/icons";
 import { SkeletonStatCard, SkeletonTableRows } from "@/components/skeleton";
 import Modal from "@/components/modal";
 
@@ -14,16 +14,18 @@ export default function ResponsesPage() {
   const toast = useToast();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, flagged: 0, today: 0 });
+  const [stats, setStats] = useState({ total: 0, flagged: 0, today: 0, verified: 0 });
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [editRow, setEditRow] = useState(null);
   const [deleteRow, setDeleteRow] = useState(null);
+  const [verifyRow, setVerifyRow] = useState(null);
   const perPage = 15;
 
   const canEdit = canEditData(user?.role);
   const canDelete = canDeleteData(user?.role);
+  const canVerify = canVerifyData(user?.role);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -100,6 +102,23 @@ export default function ResponsesPage() {
     }
   };
 
+  const handleToggleVerify = async () => {
+    if (!verifyRow) return;
+    try {
+      const res = await apiFetch("/api/responses", {
+        method: "PATCH",
+        body: JSON.stringify({ id: verifyRow.id, updates: { verified: !verifyRow.verified } }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      toast(verifyRow.verified ? "Verification removed" : "Marked as verified", "success");
+      setVerifyRow(null);
+      fetchData();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+
   const totalPages = Math.ceil(total / perPage);
 
   return (
@@ -132,9 +151,10 @@ export default function ResponsesPage() {
 
       <div className="flex-1 p-7 overflow-y-auto">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {loading ? (
             <>
+              <SkeletonStatCard />
               <SkeletonStatCard />
               <SkeletonStatCard />
               <SkeletonStatCard />
@@ -147,6 +167,12 @@ export default function ResponsesPage() {
                 label="Flagged"
                 value={stats.flagged}
                 valueColor={stats.flagged > 0 ? "text-danger" : "text-success"}
+              />
+              <StatCard
+                label="Verified"
+                value={stats.verified}
+                valueColor={stats.verified > 0 ? "text-accent" : "text-ink-4"}
+                sub={stats.total > 0 ? `${Math.round((stats.verified / stats.total) * 100)}% of total` : undefined}
               />
             </>
           )}
@@ -168,16 +194,17 @@ export default function ResponsesPage() {
                   <th>Phone</th>
                   <th>Frequency</th>
                   <th>Status</th>
+                  <th>Verified</th>
                   <th>Submitted</th>
-                  {(canEdit || canDelete) && <th>Actions</th>}
+                  {(canEdit || canDelete || canVerify) && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <SkeletonTableRows rows={8} cols={(canEdit || canDelete) ? 7 : 6} />
+                  <SkeletonTableRows rows={8} cols={(canEdit || canDelete || canVerify) ? 8 : 7} />
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-16 text-ink-4">
+                    <td colSpan={8} className="text-center py-16 text-ink-4">
                       No records found
                     </td>
                   </tr>
@@ -197,10 +224,15 @@ export default function ResponsesPage() {
                           {row.is_flagged ? "⚑ Flagged" : "✓ Clean"}
                         </span>
                       </td>
+                      <td>
+                        <span className={`badge ${row.verified ? "bg-accent/10 text-accent" : "bg-surface-3 text-ink-4"}`}>
+                          {row.verified ? "✓ Verified" : "Unverified"}
+                        </span>
+                      </td>
                       <td className="font-mono text-[11px] text-ink-4">
                         {new Date(row.submitted_at).toLocaleString()}
                       </td>
-                      {(canEdit || canDelete) && (
+                      {(canEdit || canDelete || canVerify) && (
                         <td>
                           <div className="flex gap-1">
                             {canEdit && (
@@ -212,6 +244,15 @@ export default function ResponsesPage() {
                                   <IconFlag />
                                 </button>
                               </>
+                            )}
+                            {canVerify && (
+                              <button
+                                className={`p-1.5 rounded-md transition-colors ${row.verified ? "text-accent hover:text-danger hover:bg-danger-muted" : "text-ink-4 hover:text-accent hover:bg-accent/10"}`}
+                                title={row.verified ? "Remove verification" : "Mark as verified"}
+                                onClick={() => setVerifyRow(row)}
+                              >
+                                <IconShieldCheck />
+                              </button>
                             )}
                             {canDelete && (
                               <button className="p-1.5 rounded-md text-ink-4 hover:text-danger hover:bg-danger-muted transition-colors" title="Delete" onClick={() => setDeleteRow(row)}>
@@ -277,6 +318,34 @@ export default function ResponsesPage() {
             Permanently delete the response from <strong className="text-ink-1">{deleteRow.name}</strong>?
             This will be recorded in the audit log.
           </p>
+        </Modal>
+      )}
+
+      {/* Verify Confirm */}
+      {verifyRow && (
+        <Modal
+          title={verifyRow.verified ? "Remove Verification" : "Confirm Verification"}
+          onClose={() => setVerifyRow(null)}
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => setVerifyRow(null)}>Cancel</button>
+              <button
+                className={`btn ${verifyRow.verified ? "btn-danger" : "btn-primary"}`}
+                onClick={handleToggleVerify}
+              >
+                {verifyRow.verified ? "Remove Verification" : "Mark as Verified"}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-2 leading-relaxed">
+            {verifyRow.verified ? (
+              <>Remove verification from <strong className="text-ink-1">{verifyRow.name}</strong>? Their phone number will be marked as unverified.</>
+            ) : (
+              <>Mark <strong className="text-ink-1">{verifyRow.name}</strong> as verified? This confirms their phone number has been validated.</>
+            )}
+          </p>
+          <p className="text-xs text-ink-4 mt-2">This action will be recorded in the audit log.</p>
         </Modal>
       )}
     </>

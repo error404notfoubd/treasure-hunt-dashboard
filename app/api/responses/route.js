@@ -62,6 +62,15 @@ export async function PATCH(request) {
     if (updates[key] !== undefined) safe[key] = updates[key];
   }
 
+  // "verified" requires admin+ (level 80)
+  if (updates.verified !== undefined) {
+    const { getRoleLevel } = await import("@/lib/roles");
+    if (getRoleLevel(guard.user.role) < 80) {
+      return NextResponse.json({ error: "Only admins can change verification status" }, { status: 403 });
+    }
+    safe.verified = updates.verified;
+  }
+
   const db = getDataClient();
 
   const { data: oldRow } = await db
